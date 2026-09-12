@@ -1,0 +1,19 @@
+# 构建目录
+build/
+cmake-build-*/
+
+# 编译产物
+*.o
+springsnail
+backend_http
+
+# cmake缓存
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
