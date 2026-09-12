@@ -1,7 +1,3 @@
-// http_backend.cpp
-// 编译: g++ -O2 -std=c++11 -o http_backend http_backend.cpp -lpthread
-// 运行: ./http_backend 13579
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>

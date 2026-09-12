@@ -67,7 +67,7 @@ mgr::mgr( int epollfd, const host& srv, SharedData* shared, int idx )
 
     for( int i = 0; i < srv.m_conncnt; ++i )
     {
-        usleep( 100000 );   // ✅ 从 sleep(1) 改为 usleep(0.1s)
+        usleep( 100000 );   // 从 sleep(1) 改为 usleep(0.1s)
         int sockfd = conn2srv( address );
         if( sockfd < 0 )
         {
@@ -164,39 +164,12 @@ void mgr::free_conn( conn* connection )
 }
 
 // 回收并重建连接
-// void mgr::recycle_conns()
-// {
-//     if( m_freed.empty() ) 
-//     {
-//         return;
-//     }
-//     for( map< int, conn* >::iterator iter = m_freed.begin(); iter != m_freed.end(); iter++ )
-//     {
-//         sleep( 1 );
-//         int srvfd = iter->first;
-//         conn* tmp = iter->second;
-//         // 重新连接后端
-//         srvfd = conn2srv( tmp->m_srv_address );
-//         if( srvfd < 0 )
-//         {
-//             log( LOG_ERR, __FILE__, __LINE__, "%s", "fix connection failed");
-//         }
-//         else
-//         {
-//             log( LOG_INFO, __FILE__, __LINE__, "%s", "fix connection success" );
-//             tmp->init_srv( srvfd, tmp->m_srv_address );
-//             m_conns.insert( pair< int, conn* >( srvfd, tmp ) );
-//         }
-//     }
-//     m_freed.clear();
-// }
 void mgr::recycle_conns()
 {
     if( m_freed.empty() ) return;
 
     for( map< int, conn* >::iterator iter = m_freed.begin(); iter != m_freed.end(); )
     {
-        // int srvfd = iter->first;
         conn* tmp = iter->second;
 
         int newfd = conn2srv( tmp->m_srv_address );
@@ -218,7 +191,6 @@ void mgr::recycle_conns()
 RET_CODE mgr::process( int fd, OP_TYPE type )
 {
     // 查找fd对应的连接对象
-    // conn* connection = m_used[ fd ];
     map< int, conn* >::iterator iter = m_used.find( fd );
     if( iter == m_used.end() || !iter->second )
     {
@@ -243,8 +215,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
                     }
                     case BUFFER_FULL:
                     {
-                        // 读完立即尝试写后端
-                        // return try_write_srv( connection );
                         // 缓冲区满了，修改服务器fd为可写
                         modfd( m_epollfd, srvfd, EPOLLOUT );
                         break;
@@ -267,8 +237,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
             }
             case WRITE: // 可以向客户端写数据
             {
-                // 可写时直接调用 try_write_clt
-                // return try_write_clt( connection );
                 RET_CODE res = connection->write_clt();
                 switch( res )
                 {
@@ -325,8 +293,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
                     }
                     case BUFFER_FULL:
                     {
-                        // // 读完立即尝试写客户端
-                        // return try_write_clt( connection );
                         // 缓冲区满了，修改客户端为可写
                         modfd( m_epollfd, cltfd, EPOLLOUT );
                         break;
@@ -337,7 +303,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
                         // 服务器关闭，标记但继续转发剩余数据
                         modfd( m_epollfd, cltfd, EPOLLOUT );
                         connection->m_srv_closed = true;
-                        // return try_write_clt( connection );
                         break;
                     }
                     default:
@@ -348,7 +313,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
             case WRITE: // 可以向服务器写数据
             {
                 // // 可写时直接调用 try_write_srv
-                // return try_write_srv( connection );
                 RET_CODE res = connection->write_srv();
                 log(LOG_INFO, __FILE__, __LINE__, "write_srv returned %d", res);
                 switch( res )
@@ -367,16 +331,6 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
                     case IOERR:
                     case CLOSED:
                     {
-                        /*
-                        if( connection->m_srv_write_idx == connection->m_srvread_idx )
-                        {
-                            free_conn( connection );
-                        }
-                        else
-                        {
-                            modfd( m_epollfd, cltfd, EPOLLOUT );
-                        }
-                        */
                         modfd( m_epollfd, cltfd, EPOLLOUT );
                         connection->m_srv_closed = true;
                         break;
@@ -399,108 +353,3 @@ RET_CODE mgr::process( int fd, OP_TYPE type )
     }
     return OK;
 }
-
-// // try_write_srv: 尝试把客户端数据写给后端，写完立即读后端
-// RET_CODE mgr::try_write_srv( conn* connection )
-// {
-//     int srvfd = connection->m_srvfd;
-//     int cltfd = connection->m_cltfd;
-
-//     RET_CODE res = connection->write_srv();
-//     switch( res )
-//     {
-//         case TRY_AGAIN:
-//         {
-//             // 后端发送缓冲区满，等它可写
-//             modfd( m_epollfd, srvfd, EPOLLOUT );
-//             break;
-//         }
-//         case BUFFER_EMPTY:
-//         {
-//             // 请求全部写完后，恢复两端监听读事件
-//             modfd( m_epollfd, cltfd, EPOLLIN );
-//             modfd( m_epollfd, srvfd, EPOLLIN );
-
-//             // 补刀：立即尝试读后端（响应可能已经到达）
-//             RET_CODE rres = connection->read_srv();
-//             if( rres == OK || rres == BUFFER_FULL )
-//             {
-//                 // 后端有响应，直接尝试写回客户端
-//                 return try_write_clt( connection );
-//             }
-//             else if( rres == IOERR || rres == CLOSED )
-//             {
-//                 // 后端断了，尝试把已有数据写回客户端
-//                 connection->m_srv_closed = true;
-//                 return try_write_clt( connection );
-//             }
-//             // rres == NOTHING：暂时无响应，等 epoll 通知
-//             break;
-//         }
-//         case IOERR:
-//         case CLOSED:
-//         {
-//             // 后端断了，请求发不出去，直接释放
-//             free_conn( connection );
-//             return CLOSED;
-//         }
-//         default:
-//             break;
-//     }
-//     return OK;
-// }
-
-// // try_write_clt: 尝试把后端响应写回客户端，写完立即读客户端
-// RET_CODE mgr::try_write_clt( conn* connection )
-// {
-//     int srvfd = connection->m_srvfd;
-//     int cltfd = connection->m_cltfd;
-
-//     RET_CODE res = connection->write_clt();
-//     switch( res )
-//     {
-//         case TRY_AGAIN:
-//         {
-//             // 客户端发送缓冲区满，等它可写
-//             modfd( m_epollfd, cltfd, EPOLLOUT );
-//             break;
-//         }
-//         case BUFFER_EMPTY:
-//         {
-//             // 如果后端已关闭，数据写完就释放连接
-//             if( connection->m_srv_closed )
-//             {
-//                 free_conn( connection );
-//                 return CLOSED;
-//             }
-
-//             // 恢复两端监听读事件
-//             modfd( m_epollfd, cltfd, EPOLLIN );
-//             modfd( m_epollfd, srvfd, EPOLLIN );
-
-//             // 补刀：立即尝试读客户端（下一个请求可能已经到达）
-//             RET_CODE rres = connection->read_clt();
-//             if( rres == OK || rres == BUFFER_FULL )
-//             {
-//                 // 客户端有新请求，直接尝试写给后端
-//                 return try_write_srv( connection );
-//             }
-//             else if( rres == IOERR || rres == CLOSED )
-//             {
-//                 free_conn( connection );
-//                 return CLOSED;
-//             }
-//             // rres == NOTHING：暂时无新请求，等 epoll 通知
-//             break;
-//         }
-//         case IOERR:
-//         case CLOSED:
-//         {
-//             free_conn( connection );
-//             return CLOSED;
-//         }
-//         default:
-//             break;
-//     }
-//     return OK;
-// }

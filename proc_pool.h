@@ -201,23 +201,6 @@ processpool< C, H, M >::processpool( int listenfd, int process_number )
     }
 }
 
-// 选择最空闲的子进程
-// template< typename C, typename H, typename M >
-// int processpool< C, H, M >::get_most_free_srv()
-// {
-//     int ratio = m_sub_process[0].m_busy_ratio;
-//     int idx = 0;
-//     for( int i = 0; i < m_process_number; ++i )
-//     {
-
-//         if( m_sub_process[i].m_busy_ratio < ratio )
-//         {
-//             idx = i;
-//             ratio = m_sub_process[i].m_busy_ratio;
-//         }
-//     }
-//     return idx;
-// }
 template< typename C, typename H, typename M >
 int processpool< C, H, M >::get_most_free_srv()
 {   
@@ -265,16 +248,6 @@ void processpool< C, H, M >::run( const vector<H>& arg )
     run_parent();   // 父进程
 }
 
-
-// template< typename C, typename H, typename M >
-// void processpool< C, H, M >::notify_parent_busy_ratio( int pipefd, M* manager, int need_retry )
-// {
-//     WorkerMsg msg;
-//     msg.busy_ratio = manager->get_used_conn_cnt();
-//     msg.need_retry = need_retry;
-//     send( pipefd, ( char* )&msg, sizeof( msg ), 0 );
-// }
-
 // 子进程运行
 template< typename C, typename H, typename M >
 void processpool< C, H, M >::run_child( const vector<H>& arg )
@@ -318,55 +291,6 @@ void processpool< C, H, M >::run_child( const vector<H>& arg )
         {
             int sockfd = events[i].data.fd;
 
-            // 事件1：父进程通知有连接
-            // if( ( sockfd == pipefd_read ) && ( events[i].events & EPOLLIN ) )
-            // {
-            //     int client = 0;
-            //     ret = recv( sockfd, ( char* )&client, sizeof( client ), 0 );
-            //     if( ( ( ret < 0 ) && ( errno != EAGAIN ) ) || ret == 0 ) 
-            //     {
-            //         continue;
-            //     }
-            //     else
-            //     {
-            //         // 限额循环 accept
-            //         int accepted = 0;
-            //         while( accepted < MAX_ACCEPT_PER_ROUND )
-            //         {
-            //             struct sockaddr_in client_address;
-            //             socklen_t client_addrlength = sizeof( client_address );
-            //             int connfd = accept( m_listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
-                        
-            //             if( connfd < 0 )
-            //             {
-            //                 if( errno == EAGAIN || errno == EWOULDBLOCK )
-            //                 {
-            //                     // 队列已空，正常退出循环
-            //                     break;
-            //                 }
-            //                 log( LOG_ERR, __FILE__, __LINE__, "errno: %s", strerror( errno ) );
-            //                 break;
-            //             }
-
-            //             int flag = 1;
-            //             setsockopt( connfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof( flag ) );
-            //             add_read_fd( m_epollfd, connfd );
-
-            //             C* conn = manager->pick_conn( connfd );
-            //             if( !conn )
-            //             {
-            //                 closefd( m_epollfd, connfd );
-            //                 continue;
-            //             }
-            //             conn->init_clt( connfd, client_address );
-            //             accepted++;
-            //         }
-
-            //         // 上报负载，并根据是否达到上限决定是否需要重新仲裁
-            //         int need_retry = ( accepted == MAX_ACCEPT_PER_ROUND ) ? 1 : 0;
-            //         notify_parent_busy_ratio( pipefd_read, manager, need_retry );
-            //     }
-            // }
             // 事件1：父进程唤醒，有新连接
             if( ( sockfd == pipefd_read ) && ( events[i].events & EPOLLIN ) )
             {
@@ -468,7 +392,6 @@ void processpool< C, H, M >::run_child( const vector<H>& arg )
                  {
                      case CLOSED:
                      {
-                        //  notify_parent_busy_ratio( pipefd_read, manager );
                         m_shared->busy_ratio[m_idx] = manager->get_used_conn_cnt();
                         break;
                      }
@@ -483,7 +406,6 @@ void processpool< C, H, M >::run_child( const vector<H>& arg )
                  {
                      case CLOSED:
                      {
-                        //  notify_parent_busy_ratio( pipefd_read, manager );
                         m_shared->busy_ratio[m_idx] = manager->get_used_conn_cnt();
                         break;
                      }
@@ -518,7 +440,6 @@ void processpool< C, H, M >::run_parent()
     // add_listen_fd( m_epollfd, m_listenfd );  // LT模式
 
     epoll_event events[ MAX_EVENT_NUMBER ];
-    // int sub_process_counter = 0;
     int new_conn = 1;
     int number = 0;
     int ret = -1;
@@ -539,25 +460,6 @@ void processpool< C, H, M >::run_parent()
             // 事件1：新客户端连接
             if( sockfd == m_listenfd )
             {
-                /*
-                int i =  sub_process_counter;
-                do
-                {
-                    if( m_sub_process[i].m_pid != -1 )
-                    {
-                        break;
-                    }
-                    i = (i+1)%m_process_number;
-                }
-                while( i != sub_process_counter );
-                
-                if( m_sub_process[i].m_pid == -1 )
-                {
-                    m_stop = true;
-                    break;
-                }
-                sub_process_counter = (i+1)%m_process_number;
-                */
                 // 选择最空闲的子进程
                 int idx = get_most_free_srv();
                 // 通知子进程
@@ -571,7 +473,6 @@ void processpool< C, H, M >::run_parent()
             // 事件2：信号通道
             else if( ( sockfd == sig_pipefd[0] ) && ( events[i].events & EPOLLIN ) )
             {
-                // int sig;
                 char signals[1024];
                 ret = recv( sig_pipefd[0], signals, sizeof( signals ), 0 );
                 if( ret <= 0 )
@@ -635,16 +536,6 @@ void processpool< C, H, M >::run_parent()
                     }
                 }
             }
-            // 事件3：子进程上报负载
-            // else if( events[i].events & EPOLLIN )
-            // {
-            //     WorkerMsg msg;
-            //     ret = recv( sockfd, ( char* )&msg, sizeof( msg ), 0 );
-            //     if( ( ( ret < 0 ) && ( errno != EAGAIN ) ) || ret == 0 )
-            //     {
-            //         continue;
-            //     }
-
             else if( events[i].events & EPOLLIN )
             {
                 // 读空管道

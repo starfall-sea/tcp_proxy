@@ -217,11 +217,6 @@ int main( int argc, char* argv[] )
     ret = listen( listenfd, 1024 );
     assert( ret != -1 );
 
-    //memset( cfg_host.m_hostname, '\0', 1024 );
-    //memcpy( cfg_host.m_hostname, "127.0.0.1", strlen( "127.0.0.1" ) );
-    //cfg_host.m_port = 54321;
-    //cfg_host.m_conncnt = 5;
-
     // 实例化进程池
     processpool< conn, host, mgr >* pool = processpool< conn, host, mgr >::create( listenfd, logical_srv.size() );
     
