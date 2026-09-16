@@ -90,7 +90,9 @@ mgr::~mgr()
 
 int mgr::get_used_conn_cnt()
 {
-    return m_used.size();
+    // m_used 会同时用 cltfd 和 srvfd 作为 key 指向同一个 conn，
+    // 所以实际活跃连接数是容器大小的一半。
+    return m_used.size() / 2;
 }
 
 // 从空闲池取一个连接

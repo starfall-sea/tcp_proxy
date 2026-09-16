@@ -1,6 +1,3 @@
-#ifndef FDWRAPPER_H
-#define FDWRAPPER_H
-
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
@@ -59,5 +56,3 @@ void modfd( int epollfd, int fd, int ev )
     event.events = ev | EPOLLET;    // 保留ET模式
     epoll_ctl( epollfd, EPOLL_CTL_MOD, fd, &event );
 }
-
-#endif

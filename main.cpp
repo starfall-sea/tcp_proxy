@@ -78,7 +78,7 @@ int main( int argc, char* argv[] )
 
     // 打开配置文件并全量读入内存
     int cfg_fd = open( cfg_file, O_RDONLY );
-    if( !cfg_fd )
+    if( cfg_fd < 0 )
     {
         log( LOG_ERR, __FILE__, __LINE__, "read config file met error: %s", strerror( errno ) );
         return 1;
@@ -172,16 +172,27 @@ int main( int argc, char* argv[] )
         }
         else if( (tmp3 = strstr( tmp, "Listen" )) != NULL )
         {
+            // 跳过 "Listen"
             tmp_hostname = tmp3 + 6;
+
             tmp4 = strstr( tmp_hostname, ":" );
             if( !tmp4 )
             {
                 log( LOG_ERR, __FILE__, __LINE__, "%s", "parse config file failed" );
                 return 1;
             }
+
             *tmp4++ = '\0';
+
+            // 去除 hostname 前的空格
+            while( *tmp_hostname == ' ' || *tmp_hostname == '\t' )
+            {
+                ++tmp_hostname;
+            }
+
+            memcpy( tmp_host.m_hostname, tmp_hostname, strlen( tmp_hostname ) );
             tmp_host.m_port = atoi( tmp4 );
-            memcpy( tmp_host.m_hostname, tmp3, strlen( tmp3 ) );
+
             balance_srv.push_back( tmp_host );
             memset( tmp_host.m_hostname, '\0', 1024 );
         }
